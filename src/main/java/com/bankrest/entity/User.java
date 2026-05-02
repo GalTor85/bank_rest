@@ -2,6 +2,8 @@ package com.bankrest.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -30,4 +32,7 @@ public class User {
     @OneToMany(mappedBy = "owner", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<Card> cards = new ArrayList<>();
+    public List<SimpleGrantedAuthority> getAuthorities() {
+        return List.of(new SimpleGrantedAuthority(role.getAuthority()));
+    }
 }
