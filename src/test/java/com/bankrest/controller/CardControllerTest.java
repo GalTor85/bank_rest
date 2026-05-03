@@ -51,7 +51,9 @@ class CardControllerTest {
     @Test
     @WithMockUser(username = "admin", roles = "ADMIN")
     void createCard_ShouldReturn201_WhenAdmin() throws Exception {
-        CardRequest request = new CardRequest("1234567812345678", LocalDate.now().plusYears(1));
+        CardRequest request = new CardRequest();
+        request.setCardNumber("1234567812345678");
+        request.setExpiryDate(LocalDate.now().plusYears(1));
         CardResponse response = CardResponse.builder()
                 .id(1L)
                 .maskedNumber("**** **** **** 5678")

@@ -1,8 +1,6 @@
 package com.bankrest.service;
 
-import com.bankrest.dto.AuthRequest;
-import com.bankrest.dto.AuthResponse;
-import com.bankrest.dto.RegisterRequest;
+import com.bankrest.dto.*;
 import com.bankrest.entity.User;
 import com.bankrest.exception.UserAlreadyExistsException;
 import com.bankrest.exception.UserNotFoundException;
@@ -10,6 +8,8 @@ import com.bankrest.repository.UserRepository;
 import com.bankrest.security.JwtProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -62,5 +62,44 @@ public class UserService {
 
         String token = jwtProvider.generateToken(user.getUsername(), user.getRole().name());
         return new AuthResponse(token, user.getUsername(), user.getRole().name());
+    }
+
+    public Page<UserResponse> getAllUsers(Pageable pageable) {
+        return userRepository.findAll(pageable)
+                .map(user -> UserResponse.builder()
+                        .id(user.getId())
+                        .username(user.getUsername())
+                        .role(user.getRole())
+                        .build());
+    }
+
+    public UserResponse getUserById(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new UserNotFoundException("Пользователь не найден: id=" + id));
+        return UserResponse.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .role(user.getRole())
+                .build();
+    }
+
+    public UserResponse updateUser(Long id, UpdateUserRequest request) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new UserNotFoundException("Пользователь не найден: id=" + id));
+        user.setRole(request.getRole());
+        user = userRepository.save(user);
+        log.info("User updated: id={}, newRole={}", id, request.getRole());
+        return UserResponse.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .role(user.getRole())
+                .build();
+    }
+
+    public void deleteUser(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new UserNotFoundException("Пользователь не найден: id=" + id));
+        userRepository.delete(user);
+        log.info("User deleted: id={}, username={}", id, user.getUsername());
     }
 }

@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 @Slf4j
 @Service
@@ -34,21 +35,25 @@ public class CardService {
     private final EncryptionUtil encryptionUtil;
     private final CardMaskUtil cardMaskUtil;
 
-    public CardResponse createCard(CardRequest request, String username) {
-        User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new UserNotFoundException("Пользователь не найден: " + username));
+    public CardResponse createCard(CardRequest request, String currentUsername) {
+        String targetUsername = request.getOwnerUsername() != null
+                ? request.getOwnerUsername()
+                : currentUsername;
+
+        User owner = userRepository.findByUsername(targetUsername)
+                .orElseThrow(() -> new UserNotFoundException("Пользователь не найден: " + targetUsername));
 
         Card card = Card.builder()
                 .encryptedNumber(encryptionUtil.encrypt(request.getCardNumber()))
                 .lastFourDigits(request.getCardNumber().substring(12))
-                .owner(user)
+                .owner(owner)
                 .expiryDate(request.getExpiryDate())
                 .status(CardStatus.ACTIVE)
                 .balance(BigDecimal.ZERO)
                 .build();
 
         card = cardRepository.save(card);
-        log.info("Card created: id={}, owner={}", card.getId(), username);
+        log.info("Card created: id={}, owner={}", card.getId(), owner.getUsername());
 
         return mapToResponse(card);
     }
@@ -118,6 +123,10 @@ public class CardService {
             throw new AccessDeniedException("Обе карты должны принадлежать вам");
         }
 
+        if (fromCard.getExpiryDate().isBefore(LocalDate.now()) || toCard.getExpiryDate().isBefore(LocalDate.now())) {
+            throw new IllegalStateException("Одна из карт имеет истекший срок действия");
+        }
+
         if (fromCard.getStatus() != CardStatus.ACTIVE || toCard.getStatus() != CardStatus.ACTIVE) {
             throw new IllegalStateException("Обе карты должны быть активны");
         }
@@ -142,6 +151,10 @@ public class CardService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UserNotFoundException("Пользователь не найден"));
 
+        if (card.getExpiryDate().isBefore(LocalDate.now())) {
+            throw new IllegalStateException("Нельзя заблокировать карту с истекшим сроком действия");
+        }
+
         if (user.getRole() != Role.ADMIN && !card.getOwner().getUsername().equals(username)) {
             throw new AccessDeniedException("Доступ запрещён");
         }
@@ -150,12 +163,16 @@ public class CardService {
     }
 
     private CardResponse mapToResponse(Card card) {
+        CardStatus status = card.getStatus();
+        if (status == CardStatus.ACTIVE && card.getExpiryDate().isBefore(LocalDate.now())) {
+            status = CardStatus.EXPIRED;
+        }
         return CardResponse.builder()
                 .id(card.getId())
                 .maskedNumber(cardMaskUtil.mask(card.getLastFourDigits()))
                 .ownerUsername(card.getOwner().getUsername())
                 .expiryDate(card.getExpiryDate())
-                .status(card.getStatus())
+                .status(status)
                 .balance(card.getBalance())
                 .build();
     }

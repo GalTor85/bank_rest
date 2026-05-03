@@ -23,7 +23,15 @@ public class SecurityConfig {
     private final JwtFilter jwtFilter;
 
     // ===== URL Patterns =====
-    private static final String[] SWAGGER_URLS = {"/swagger-ui/**", "/v3/api-docs/**"};
+    private static final String[] SWAGGER_URLS = {
+            "/swagger-ui/**",
+            "/swagger-ui.html",
+            "/v3/api-docs/**",
+            "/v3/api-docs",          // без слеша, чтобы открыть /v3/api-docs
+            "/v3/api-docs.yaml",     // явно разрешить .yaml (иногда нужно)
+            "/swagger-resources/**",
+            "/webjars/**"
+    };
     private static final String[] H2_CONSOLE_URLS = {"/h2-console/**"};
     private static final String[] PUBLIC_URLS = {"/auth/login"};
 

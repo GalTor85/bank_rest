@@ -18,4 +18,6 @@ public class CardRequest {
     @NotNull(message = "Срок действия обязателен")
     @Future(message = "Срок действия должен быть в будущем")
     private LocalDate expiryDate;
+
+    private String ownerUsername;
 }

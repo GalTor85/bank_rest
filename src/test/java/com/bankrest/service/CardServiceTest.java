@@ -32,10 +32,14 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class CardServiceTest {
 
-    @Mock private CardRepository cardRepository;
-    @Mock private UserRepository userRepository;
-    @Mock private EncryptionUtil encryptionUtil;
-    @Mock private CardMaskUtil cardMaskUtil;
+    @Mock
+    private CardRepository cardRepository;
+    @Mock
+    private UserRepository userRepository;
+    @Mock
+    private EncryptionUtil encryptionUtil;
+    @Mock
+    private CardMaskUtil cardMaskUtil;
 
     @InjectMocks
     private CardService cardService;
@@ -123,17 +127,24 @@ class CardServiceTest {
 
     @Test
     void createCard_ShouldSaveCardWithEncryptedNumber() {
-        CardRequest request = new CardRequest("1234567812345678", LocalDate.now().plusYears(1));
-        when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
+        CardRequest request = new CardRequest();
+        request.setCardNumber("1234567812345678");
+        request.setExpiryDate(LocalDate.now().plusYears(1));
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(admin));
         when(encryptionUtil.encrypt("1234567812345678")).thenReturn("encrypted");
-        when(cardRepository.save(any(Card.class))).thenReturn(card1);
-        when(cardMaskUtil.mask("1234")).thenReturn("**** **** **** 1234");
+        when(cardRepository.save(any(Card.class))).thenAnswer(inv -> {
+            Card c = inv.getArgument(0);
+            c.setId(10L);
+            return c;
+        });
+        when(cardMaskUtil.mask("5678")).thenReturn("**** **** **** 5678");
 
-        CardResponse response = cardService.createCard(request, "user");
+        CardResponse response = cardService.createCard(request, "admin");
 
         assertNotNull(response);
-        verify(encryptionUtil).encrypt("1234567812345678");
-        verify(cardRepository).save(any(Card.class));
+        assertEquals("admin", response.getOwnerUsername());
+        verify(userRepository).findByUsername("admin");
+        verify(userRepository, never()).findByUsername("user");
     }
 
     // ===== blockCard =====
@@ -224,5 +235,61 @@ class CardServiceTest {
         when(cardRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThrows(CardNotFoundException.class, () -> cardService.deleteCard(99L));
+    }
+
+    @Test
+    void createCard_ShouldCreateCardForSpecifiedUser_WhenAdminSetsOwner() {
+        CardRequest request = new CardRequest();
+        request.setCardNumber("1234567812345678");
+        request.setExpiryDate(LocalDate.now().plusYears(1));
+        request.setOwnerUsername("user");   // администратор указывает обычного пользователя
+
+        when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
+        when(encryptionUtil.encrypt("1234567812345678")).thenReturn("encrypted");
+        when(cardRepository.save(any(Card.class))).thenAnswer(inv -> {
+            Card c = inv.getArgument(0);
+            c.setId(20L);
+            return c;
+        });
+        when(cardMaskUtil.mask("5678")).thenReturn("**** **** **** 5678");
+
+        CardResponse response = cardService.createCard(request, "admin");
+
+        assertEquals("user", response.getOwnerUsername());
+        verify(userRepository).findByUsername("user");
+    }
+
+    @Test
+    void getCard_ShouldReturnExpiredStatus_WhenDatePassed() {
+        card1.setExpiryDate(LocalDate.now().minusDays(1));
+        when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
+        when(cardRepository.findById(1L)).thenReturn(Optional.of(card1));
+        when(cardMaskUtil.mask("1234")).thenReturn("**** **** **** 1234");
+
+        CardResponse response = cardService.getCard(1L, "user");
+
+        assertEquals(CardStatus.EXPIRED, response.getStatus());
+    }
+
+    @Test
+    void transfer_ShouldThrowIllegalState_WhenCardExpired() {
+        card1.setExpiryDate(LocalDate.now().minusDays(1));
+        TransferRequest request = new TransferRequest(1L, 2L, BigDecimal.valueOf(100));
+
+        when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
+        when(cardRepository.findById(1L)).thenReturn(Optional.of(card1));
+        when(cardRepository.findById(2L)).thenReturn(Optional.of(card2));
+
+        assertThrows(IllegalStateException.class, () -> cardService.transfer(request, "user"));
+    }
+
+    @Test
+    void blockCard_ShouldThrowIllegalState_WhenCardExpired() {
+        card1.setExpiryDate(LocalDate.now().minusDays(1));
+
+        when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
+        when(cardRepository.findById(1L)).thenReturn(Optional.of(card1));
+
+        assertThrows(IllegalStateException.class, () -> cardService.blockCard(1L, "user"));
     }
 }
